@@ -3,6 +3,7 @@ import pandas as pd
 import plotly.express as px
 import seaborn as sns
 import matplotlib.pyplot as plt
+import numpy as np
 
 st.set_page_config(layout="wide", page_title="청년 NEET 노동시장 진입 분석")
 
@@ -81,7 +82,7 @@ st.divider()
 st.header("2. 그룹별 특성 비교 (Basic Analysis)")
 st.info("2021년(1차년도) 당시의 인구통계학적 특성에 따른 취업 성공률 차이를 분석합니다.")
 
-tab1, tab2, tab3 = st.tabs(["📊 인구통계학적 특성", "🏫 학력 및 지역", "💪 건강 상태"])
+tab1, tab2, tab3, tab10 = st.tabs(["📊 인구통계학적 특성", "🏫 학력 및 지역", "💪 건강 상태", "지도"])
 
 with tab1:
     c1, c2 = st.columns(2)
@@ -178,8 +179,172 @@ with tab3:
                         labels={"ratio": "비율(%)", "health_label": "건강 상태"})
     st.plotly_chart(fig_health, use_container_width=True)
 
-st.divider()
+with tab10:
+    # -----------------------------------------------------------------------------
+# [Interactive] 지역별 심층 특성 지도 + 클릭 상세 리포트 (오류 수정됨)
+# -----------------------------------------------------------------------------
+ st.divider()
+st.header("4. 지역별 심층 특성 지도 (Interactive Map)")
+st.info("👇 **지도 위의 원을 클릭**해보세요! 하단에 해당 지역의 상세 분석 리포트가 나타납니다.")
 
+# 1. 데이터 집계
+agg_funcs = {
+    'self_efficacy': 'mean',        # 자아효능감
+    'career_plan_score': 'mean',    # 진로계획 명확성
+    'got_job_flag': 'mean',         # 취업 성공률
+    'sampid': 'count'               # 표본 수
+}
+
+# 부모님 대졸 비율 & 진로지도 경험률 추가
+if 'father_edu' in filtered_df.columns:
+    filtered_df['father_high_edu'] = filtered_df['father_edu'].apply(lambda x: 1 if x == '대졸 이상' else 0)
+    agg_funcs['father_high_edu'] = 'mean'
+if 'career_guidance' in filtered_df.columns:
+    filtered_df['has_guidance'] = filtered_df['career_guidance'].apply(lambda x: 1 if x == '있음' else 0)
+    agg_funcs['has_guidance'] = 'mean'
+if 'y01a616_1' in filtered_df.columns: 
+    filtered_df['has_intern'] = filtered_df['y01a616_1'].apply(lambda x: 1 if x in [1, 2] else 0)
+    agg_funcs['has_intern'] = 'mean'
+
+# 집계 실행
+map_deep_df = filtered_df.groupby('region_label', observed=False).agg(agg_funcs).reset_index()
+
+# 표시용 데이터 가공 (점수 및 % 변환)
+map_deep_df['취업 성공률(%)'] = (map_deep_df['got_job_flag'] * 100).round(1)
+map_deep_df['자아효능감(점)'] = map_deep_df['self_efficacy'].round(2)
+map_deep_df['진로계획 명확성(점)'] = map_deep_df['career_plan_score'].round(2)
+
+if 'father_high_edu' in map_deep_df.columns:
+    map_deep_df['부모 대졸비율(%)'] = (map_deep_df['father_high_edu'] * 100).round(1)
+if 'has_guidance' in map_deep_df.columns:
+    map_deep_df['진로지도 경험률(%)'] = (map_deep_df['has_guidance'] * 100).round(1)
+if 'has_intern' in map_deep_df.columns:
+    map_deep_df['인턴 경험률(%)'] = (map_deep_df['has_intern'] * 100).round(1)
+
+# 좌표 매핑
+region_coords = {
+    '서울': [37.5665, 126.9780], '부산': [35.1796, 129.0756], '대구': [35.8714, 128.6014],
+    '인천': [37.4563, 126.7052], '광주': [35.1601, 126.8517], '대전': [36.3504, 127.3845],
+    '울산': [35.5384, 129.3114], '세종': [36.4800, 127.2890], '경기': [37.4138, 127.5183],
+    '강원': [37.8228, 128.1555], '충북': [36.6350, 127.4914], '충남': [36.5184, 126.8000],
+    '전북': [35.7175, 127.1530], '전남': [34.8161, 126.4629], '경북': [36.5783, 128.5093],
+    '경남': [35.2383, 128.6925], '제주': [33.4996, 126.5312]
+}
+map_deep_df['lat'] = map_deep_df['region_label'].map(lambda x: region_coords.get(x, [None, None])[0])
+map_deep_df['lon'] = map_deep_df['region_label'].map(lambda x: region_coords.get(x, [None, None])[1])
+
+# 2. 지도 그리기 (Interactive)
+metric_options = {
+    '취업 성공률(%)': 'RdYlGn',     
+    '자아효능감(점)': 'Blues',      
+    '진로계획 명확성(점)': 'Purples', 
+    '부모 대졸비율(%)': 'Oranges',  
+    '진로지도 경험률(%)': 'Teal'    
+}
+valid_metrics = [m for m in metric_options.keys() if m in map_deep_df.columns]
+
+col_sel, _ = st.columns([1, 2])
+with col_sel:
+    selected_metric = st.selectbox("🎨 지도 색상 기준 (지표 선택)", valid_metrics)
+
+# [수정 포인트 1] 지도용 데이터프레임을 따로 정의 (인덱스 참조를 위해)
+plot_df = map_deep_df.dropna(subset=['lat', 'lon']).reset_index(drop=True)
+
+if not plot_df.empty:
+    fig_deep_map = px.scatter_mapbox(
+        plot_df,
+        lat="lat", lon="lon",
+        size="sampid",                  
+        color=selected_metric,          
+        color_continuous_scale=metric_options[selected_metric],
+        size_max=40, zoom=5.5,
+        center={"lat": 36.5, "lon": 127.8},
+        mapbox_style="carto-positron",
+        title=f"지역별 '{selected_metric}' 분포 (클릭하여 상세 보기)",
+        hover_name="region_label",
+        hover_data={'lat': False, 'lon': False, 'sampid': True}
+    )
+    fig_deep_map.update_layout(margin={"r":0,"t":40,"l":0,"b":0})
+
+    # 클릭 이벤트 활성화
+    event = st.plotly_chart(fig_deep_map, use_container_width=True, on_select="rerun", selection_mode="points")
+else:
+    st.warning("지도 데이터가 없습니다.")
+    event = None
+
+# 3. 클릭 시 상세 리포트
+selected_region = None
+
+# [수정 포인트 2] point_index를 사용하여 안전하게 데이터 조회
+if event and event['selection']['points']:
+    point_idx = event['selection']['points'][0]['point_index']
+    # plot_df에서 해당 인덱스의 지역명을 가져옴
+    selected_region = plot_df.iloc[point_idx]['region_label']
+
+if selected_region:
+    st.divider()
+    st.subheader(f"🔍 [{selected_region}] 상세 분석 리포트")
+    
+    # 해당 지역 데이터 추출
+    region_data = map_deep_df[map_deep_df['region_label'] == selected_region].iloc[0]
+    national_avg = map_deep_df.mean(numeric_only=True)
+    
+    # (1) 핵심 지표 비교
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("대상 인원", f"{int(region_data['sampid']):,}명")
+    
+    val_job = region_data['취업 성공률(%)']
+    avg_job = national_avg['취업 성공률(%)']
+    c2.metric("취업 성공률", f"{val_job}%", f"{val_job - avg_job:.1f}%p")
+    
+    val_eff = region_data['자아효능감(점)']
+    avg_eff = national_avg['자아효능감(점)']
+    c3.metric("자아효능감", f"{val_eff}점", f"{val_eff - avg_eff:.2f}점")
+    
+    val_plan = region_data['진로계획 명확성(점)']
+    avg_plan = national_avg['진로계획 명확성(점)']
+    c4.metric("진로계획 명확성", f"{val_plan}점", f"{val_plan - avg_plan:.2f}점")
+
+    # (2) 레이더 차트
+    st.markdown("##### 🕸️ 영역별 강점/약점 분석 (전국 평균=100 기준)")
+    
+    radar_metrics = {
+        '취업 성공률': 'got_job_flag',
+        '자아효능감': 'self_efficacy',
+        '진로계획': 'career_plan_score',
+        '부모 학력(대졸↑)': 'father_high_edu',
+        '인턴 경험률': 'has_intern'
+    }
+    
+    radar_data = []
+    categories = []
+    
+    for label, col in radar_metrics.items():
+        if col in map_deep_df.columns:
+            reg_val = map_deep_df.loc[map_deep_df['region_label'] == selected_region, col].values[0]
+            nat_val = map_deep_df[col].mean()
+            ratio = (reg_val / nat_val) * 100 if nat_val > 0 else 0
+            radar_data.append(ratio)
+            categories.append(label)
+    
+    if radar_data:
+        radar_df = pd.DataFrame(dict(r=radar_data, theta=categories))
+        
+        fig_radar = px.line_polar(radar_df, r='r', theta='theta', line_close=True,
+                                  title=f"{selected_region} vs 전국 평균(100)")
+        fig_radar.update_traces(fill='toself', line_color='#3498db')
+        fig_radar.update_layout(polar=dict(radialaxis=dict(visible=True, range=[0, max(max(radar_data), 120)])))
+        st.plotly_chart(fig_radar, use_container_width=True)
+        
+        max_idx = radar_data.index(max(radar_data))
+        min_idx = radar_data.index(min(radar_data))
+        
+        strong_point = categories[max_idx]
+        weak_point = categories[min_idx]
+        st.success(f"💡 **{selected_region}**의 강점은 **'{strong_point}'**이며, 상대적으로 **'{weak_point}'** 수치가 낮습니다.")
+
+else:
+    st.info("👆 지도에서 지역(원)을 클릭하면 상세 비교 분석 결과가 여기에 표시됩니다.")
 # -----------------------------------------------------------------------------
 # 5. Part 2: 진로 및 활동 경험 분석 (심화 분석)
 # -----------------------------------------------------------------------------
