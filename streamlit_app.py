@@ -102,6 +102,45 @@ with tab1:
                          labels={"age": "나이 (2021년 기준)", "outcome": "상태"})
         st.plotly_chart(fig_age, use_container_width=True)
 
+    # --- [추가된 부분] 성별 X 나이 교차 분석 ---
+    st.divider() # 구분선 추가
+    st.subheader("📊 심화: 나이대와 성별에 따른 취업률 차이")
+    
+    # 3. 나이 그룹 생성 (데이터에 없는 경우 즉석에서 생성)
+    if 'age_group' not in filtered_df.columns:
+        filtered_df['age_group'] = pd.cut(filtered_df['age'], 
+                                          bins=[18, 24, 29], 
+                                          labels=['19-24세 (초반)', '25-29세 (후반)'])
+
+    # 4. 데이터 집계 (나이대/성별별 취업 성공률)
+    # got_job_flag가 1(성공), 0(실패)이므로 mean()이 성공률이 됨
+    grouped_stats = filtered_df.groupby(['age_group', 'gender_label'], observed=False)['got_job_flag'].mean().reset_index()
+    grouped_stats['success_rate'] = grouped_stats['got_job_flag'] * 100 # % 변환
+
+    col_new1, col_new2 = st.columns([2, 1])
+
+    with col_new1:
+        # 그룹 막대 그래프 (Grouped Bar Chart)
+        fig_cross = px.bar(grouped_stats, 
+                           x='age_group', 
+                           y='success_rate', 
+                           color='gender_label',
+                           barmode='group', # 남/녀 막대를 옆으로 나란히
+                           text_auto='.1f',
+                           title="20대 초반 vs 후반 남녀 취업 성공률 비교",
+                           labels={'success_rate': '취업 성공률(%)', 'age_group': '나이대', 'gender_label': '성별'},
+                           color_discrete_map={'남성': '#3498db', '여성': '#e74c3c'}) # 파랑/빨강 구분
+        st.plotly_chart(fig_cross, use_container_width=True)
+
+    with col_new2:
+        st.markdown("**💡 상세 수치표**")
+        st.caption("각 나이대에서 남성과 여성의 취업률(%)을 비교합니다.")
+        
+        # 보기 좋게 피벗 테이블로 변환
+        pivot_table = grouped_stats.pivot(index='age_group', columns='gender_label', values='success_rate')
+        # 색상 입혀서 표 출력
+        st.dataframe(pivot_table.style.format("{:.1f}%").background_gradient(cmap="Blues", axis=None))
+
 with tab2:
     c1, c2 = st.columns(2)
     # 학력별 분포
