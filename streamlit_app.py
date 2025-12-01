@@ -186,7 +186,7 @@ st.divider()
 st.header("3. 진로 발달 및 경험 요인 (Deep Dive)")
 st.markdown("단순 스펙 외에 **인턴/알바 경험, 진로지도, 진로계획 명확성**이 실제 취업에 어떤 영향을 미치는지 봅니다.")
 
-tab4, tab5, tab6 = st.tabs(["🛠️ 재학 중 활동 경험", "🧭 진로지도 및 계획", "🔗 요인 상관관계"])
+tab4, tab5, tab6, tab7 = st.tabs(["🛠️ 재학 중 활동 경험", "🔎 구직 노력(경로)", "🧭 진로지도 및 계획", "🔗 요인 상관관계"])
 
 with tab4:
     st.subheader("인턴 및 아르바이트 경험의 영향")
@@ -214,6 +214,82 @@ with tab4:
     st.info("📌 **참고**: '경험 없음' 그룹 대비 '인턴/현장실습' 경험자의 취업 성공률이 유의미하게 높은지 확인해보세요.")
 
 with tab5:
+    st.subheader("📢 구직 정보 취득 경로 (1순위)")
+
+    # '응답 없음' 제거한 데이터만 분석
+    if 'search_method' in filtered_df.columns:
+        search_df = filtered_df[filtered_df['search_method'] != '응답 없음']
+
+        # 응답자가 0명일 때
+        if search_df.empty:
+            st.warning("구직 경로에 응답한 사람이 없습니다. (대부분 무응답)")
+            st.stop()
+
+        c_path1, c_path2 = st.columns([1, 1])
+
+        # -----------------------
+        # 1) 구직 경로 사용량 히스토그램
+        # -----------------------
+        with c_path1:
+            st.markdown("**구직 경로별 활용 비중 (인기 순위)**")
+
+            path_counts = search_df['search_method'].value_counts().reset_index()
+            path_counts.columns = ['구직 경로', '인원수']
+
+            fig_path = px.bar(
+                path_counts, x='인원수', y='구직 경로', orientation='h',
+                text='인원수', title="NEET 청년들이 가장 많이 사용한 구직 경로"
+            )
+            fig_path.update_layout(yaxis={'categoryorder': 'total ascending'})
+            st.plotly_chart(fig_path, use_container_width=True)
+
+        # -----------------------
+        # 2) 경로별 취업 성공률
+        # -----------------------
+        with c_path2:
+            st.markdown("**경로별 취업 성공률 (%)**")
+
+            # 최소 5명 이상 응답한 경로만 사용 (표본 너무 작으면 왜곡됨)
+            method_counts = search_df['search_method'].value_counts()
+            valid_methods = method_counts[method_counts >= 5].index
+            valid_df = search_df[search_df['search_method'].isin(valid_methods)]
+
+            if valid_df.empty:
+                st.info("응답자가 너무 적어 의미 있는 통계가 없습니다.")
+            else:
+                path_succ = valid_df.groupby('search_method')['got_job_flag'].mean().reset_index()
+                path_succ['성공률'] = path_succ['got_job_flag'] * 100
+                path_succ = path_succ.sort_values(by='성공률', ascending=False)
+
+                fig_succ_path = px.bar(
+                    path_succ, x='성공률', y='search_method', orientation='h',
+                    text_auto='.1f', color='성공률', color_continuous_scale='Greens',
+                    title="실제 취업 성공률이 높은 구직 경로 (Top)"
+                )
+                fig_succ_path.update_layout(yaxis={'categoryorder': 'total ascending'})
+                st.plotly_chart(fig_succ_path, use_container_width=True)
+
+        # -----------------------
+        # 3) 상세 교차표
+        # -----------------------
+        st.markdown("---")
+        st.markdown("### 📋 경로별 상세 데이터 표")
+
+        cross_tab = pd.crosstab(search_df['search_method'], search_df['outcome'])
+        cross_tab['합계'] = cross_tab.sum(axis=1)
+        cross_tab['취업 성공률(%)'] = (cross_tab['취업 성공'] / cross_tab['합계'] * 100).round(1)
+
+        cross_tab_sorted = cross_tab.sort_values(by='취업 성공률(%)', ascending=False)
+
+        st.dataframe(
+            cross_tab_sorted.style.background_gradient(cmap="Greens", subset=['취업 성공률(%)'])
+        )
+        st.caption("※ ‘응답 없음’은 제외했습니다. 표본 수가 너무 적은 경로는 왜곡될 수 있습니다.")
+
+    else:
+        st.warning("구직 경로 데이터가 없습니다. make_data.py를 다시 실행해주세요.")
+
+with tab6:
     c1, c2 = st.columns(2)
     
     with c1:
@@ -233,7 +309,7 @@ with tab5:
                           labels={"career_plan_score": "진로계획 명확성(점)"})
         st.plotly_chart(fig_plan, use_container_width=True)
 
-with tab6:
+with tab7:
     st.markdown("**취업 성공(Got Job)과의 상관관계 분석**")
     st.caption("빨간색(양의 상관관계)이 진할수록 취업 성공과 관련이 높습니다.")
     
