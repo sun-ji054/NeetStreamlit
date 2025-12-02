@@ -18,7 +18,7 @@ target_vars = [
     'y01e606',  # 건강상태
     'y01a601', 'y01a616_1',  # 활동경험
     'y01e401',               # 진로지도
-    'y01e501',               # 진로계획 점수
+    'y01e501',  'y01e510', 'y01e511', 'y01e519',             # 진로계획 점수
     'w01edu_f', 'w01edu_m',  # 부모 학력
     'y01a439',               # 학자금 대출
     'y01e513', 'y01e514', 'y01e515',  # 자아효능감
@@ -27,8 +27,8 @@ target_vars = [
 
 valid_vars = [c for c in target_vars if c in w1.columns]
 w1_sel = w1[valid_vars].copy()
-w2_sel = w2[['sampid', 'w02ecoact', 'w02student']]
-w3_sel = w3[['sampid', 'w03ecoact', 'w03student']]
+w2_sel = w2[['sampid', 'w02ecoact', 'w02student','y02e501',  'y02e510', 'y02e511', 'y02e519']]
+w3_sel = w3[['sampid', 'w03ecoact', 'w03student', 'y03e501',  'y03e510', 'y03e511', 'y03e519']]
 
 # 3. 데이터 병합
 df = w1_sel.merge(w2_sel, on='sampid', how='left').merge(w3_sel, on='sampid', how='left')
@@ -80,6 +80,36 @@ neet_df['student_loan'] = neet_df['y01a439'].map({1: '있음', 2: '없음'})
 
 # (6) 진로 계획
 neet_df['career_plan_score'] = neet_df['y01e501']
+neet_df['trouble_deciding_career'] = neet_df['y01e510']
+neet_df['uncertain_decision_pending'] = neet_df['y01e511']
+neet_df['aptitude_not_known'] = neet_df['y01e519']
+
+neet_df['career_plan_score_02'] = neet_df['y02e501']
+neet_df['trouble_deciding_career_02'] = neet_df['y02e510']
+neet_df['uncertain_decision_pending_02'] = neet_df['y02e511']
+neet_df['aptitude_not_known_02'] = neet_df['y02e519']
+
+neet_df['career_plan_score_03'] = neet_df['y03e501']
+neet_df['trouble_deciding_career_03'] = neet_df['y03e510']
+neet_df['uncertain_decision_pending_03'] = neet_df['y03e511']
+neet_df['aptitude_not_known_03'] = neet_df['y03e519']
+
+neet_df['avg_career_plan_score'] = neet_df[
+    ['career_plan_score', 'career_plan_score_02', 'career_plan_score_03']
+].mean(axis=1)
+
+neet_df['avg_trouble_deciding_career'] = neet_df[
+    ['trouble_deciding_career', 'trouble_deciding_career_02', 'trouble_deciding_career_03']
+].mean(axis=1)
+
+neet_df['avg_uncertain_decision_pending'] = neet_df[
+    ['uncertain_decision_pending', 'uncertain_decision_pending_02', 'uncertain_decision_pending_03']
+].mean(axis=1)
+
+neet_df['avg_aptitude_not_known'] = neet_df[
+    ['aptitude_not_known', 'aptitude_not_known_02', 'aptitude_not_known_03']
+].mean(axis=1)
+
 
 # (7) 활동 경험
 def clean_exp(row):

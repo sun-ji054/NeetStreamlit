@@ -4,6 +4,9 @@ import plotly.express as px
 import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
+import plotly.graph_objects as go
+from scipy.stats import ttest_ind
+
 
 st.set_page_config(layout="wide", page_title="청년 NEET 노동시장 진입 분석")
 
@@ -27,47 +30,24 @@ def load_data():
 df = load_data()
 
 # -----------------------------------------------------------------------------
-# 2. 사이드바 필터 & 헤더
+# 1. 사이트 타이틀
 # -----------------------------------------------------------------------------
 st.title("🚧 일하지 않는 청년들, 멈춤에서 길을 찾다")
 st.markdown("##### : 청년패널(YP2021) NEET 청년의 노동시장 진입 요인 분석")
 
-st.sidebar.header("필터 설정")
-
-# 성별 필터
-if 'gender_label' in df.columns:
-    gender_filter = st.sidebar.multiselect(
-        "성별 선택",
-        options=df['gender_label'].unique(),
-        default=df['gender_label'].unique()
-    )
-else:
-    gender_filter = []
-
-# 지역 필터
-if 'region_label' in df.columns:
-    region_filter = st.sidebar.multiselect(
-        "거주 지역 선택",
-        options=sorted(df['region_label'].dropna().unique()),
-        default=sorted(df['region_label'].dropna().unique())
-    )
-else:
-    region_filter = []
-
-# 필터링 적용
-filtered_df = df[
-    (df['gender_label'].isin(gender_filter)) &
-    (df['region_label'].isin(region_filter))
-]
+# -----------------------------------------------------------------------------
+# 2. 사이드 바
+# -----------------------------------------------------------------------------
+st.sidebar.success("Select a demo above.")
 
 # -----------------------------------------------------------------------------
-# 3. Key Metrics (요약 지표)
+# 3. 요약 지표
 # -----------------------------------------------------------------------------
 st.markdown("### 1. 현황 요약")
 col1, col2, col3 = st.columns(3)
 
-total_neet = len(filtered_df)
-success_count = len(filtered_df[filtered_df['outcome'] == '취업 성공'])
+total_neet = len(df)
+success_count = len(df[df['outcome'] == '취업 성공'])
 success_rate = (success_count / total_neet * 100) if total_neet > 0 else 0
 
 col1.metric("분석 대상 (2021년 NEET)", f"{total_neet:,} 명")
@@ -77,19 +57,138 @@ col3.metric("진입 성공률", f"{success_rate:.1f}%")
 st.divider()
 
 # -----------------------------------------------------------------------------
+# 4. Part: 진로발달
+# -----------------------------------------------------------------------------
+st.header("진로발달 특성 비교")
+st.info("""니트족과 취업군의 진로발달 특성을 비교분석합니다.\n
+        e501(진로발달_나는 내 또래에 비해서 뚜렷한 진로 계획을 가지고 있다)\n
+        e510(나는 직업들 중에서 하나를 결정하느라고 애를 먹고 있다)\n
+        e511(진로선택에 관한 것이 너무 불확실해서 결정하는 것을 보류하고 싶다)""")
+
+tab11, tab12 = st.tabs(["진로발달", "진로발달 상세"])
+
+# ==============================
+# 📌 TAB 11 — 레이더 차트
+# ==============================
+with tab11:
+
+    radar_cols = [
+        'avg_career_plan_score',
+        'avg_trouble_deciding_career',
+        'avg_uncertain_decision_pending',
+        'avg_aptitude_not_known'
+    ]
+
+    categories = ['진로 계획 명확성', '진로결정 어려움', '진로 불확실성', '적성을 모름']
+
+    # 그룹별 평균 계산
+    avg_diff = df.groupby('outcome')[radar_cols].mean().reset_index()
+
+    fig_radar_psych = go.Figure()
+
+    # 취업 성공 군
+    if '취업 성공' in avg_diff['outcome'].values:
+        success_vals = avg_diff[avg_diff['outcome'] == '취업 성공'][radar_cols].values[0].tolist()
+        fig_radar_psych.add_trace(go.Scatterpolar(
+            r=success_vals + [success_vals[0]],
+            theta=categories + [categories[0]],
+            fill='toself',
+            name='취업 성공',
+            line_color='#2ecc71'
+        ))
+
+    # 미취업 군
+    if '미취업' in avg_diff['outcome'].values:
+        fail_vals = avg_diff[avg_diff['outcome'] == '미취업'][radar_cols].values[0].tolist()
+        fig_radar_psych.add_trace(go.Scatterpolar(
+            r=fail_vals + [fail_vals[0]],
+            theta=categories + [categories[0]],
+            fill='toself',
+            name='미취업',
+            line_color='#e74c3c'
+        ))
+
+    fig_radar_psych.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[1, 5])),
+        title="3개년 평균 진로발달 요인 비교"
+    )
+
+    st.plotly_chart(fig_radar_psych, use_container_width=True)
+
+# ==============================
+# 📌 TAB 12 — 상세 박스플롯 + T-test
+# ==============================
+with tab12:
+
+    common_box_opts = {
+        "x": "outcome",
+        "color": "outcome",
+        "category_orders": {"outcome": ["취업 성공", "미취업"]},
+        "color_discrete_map": {"취업 성공": "#2ecc71", "미취업": "#e74c3c"}
+    }
+
+    b_col1, b_col2, b_col3 = st.columns(3)
+
+    # -------------------
+    # ① 진로 계획 명확성
+    # -------------------
+    with b_col1:
+        st.markdown("**① 진로 계획 명확성**")
+        fig_b1 = px.box(df, y="avg_career_plan_score", **common_box_opts)
+        fig_b1.update_layout(showlegend=False)
+        st.plotly_chart(fig_b1, use_container_width=True)
+
+        # T-test
+        g1 = df[df['outcome'] == '취업 성공']['avg_career_plan_score'].dropna()
+        g2 = df[df['outcome'] == '미취업']['avg_career_plan_score'].dropna()
+        t_stat, p_val = ttest_ind(g1, g2, equal_var=False)
+        st.markdown(f"📌 **t-test p-value:** `{p_val:.4f}`")
+
+    # -------------------
+    # ② 진로결정 어려움
+    # -------------------
+    with b_col2:
+        st.markdown("**② 진로결정 어려움**")
+        fig_b2 = px.box(df, y="avg_trouble_deciding_career", **common_box_opts)
+        fig_b2.update_layout(showlegend=False)
+        st.plotly_chart(fig_b2, use_container_width=True)
+
+        # T-test
+        g1 = df[df['outcome'] == '취업 성공']['avg_trouble_deciding_career'].dropna()
+        g2 = df[df['outcome'] == '미취업']['avg_trouble_deciding_career'].dropna()
+        t_stat, p_val = ttest_ind(g1, g2, equal_var=False)
+        st.markdown(f"📌 **t-test p-value:** `{p_val:.4f}`")
+
+    # -------------------
+    # ③ 진로 불확실성
+    # -------------------
+    with b_col3:
+        st.markdown("**③ 진로 불확실성**")
+        fig_b3 = px.box(df, y="avg_uncertain_decision_pending", **common_box_opts)
+        fig_b3.update_layout(showlegend=False)
+        st.plotly_chart(fig_b3, use_container_width=True)
+
+        # T-test
+        g1 = df[df['outcome'] == '취업 성공']['avg_uncertain_decision_pending'].dropna()
+        g2 = df[df['outcome'] == '미취업']['avg_uncertain_decision_pending'].dropna()
+        t_stat, p_val = ttest_ind(g1, g2, equal_var=False)
+        st.markdown(f"📌 **t-test p-value:** `{p_val:.4f}`")
+
+
+# -----------------------------------------------------------------------------
 # 4. Part 1: 기본 특성 분석 (주신 코드 반영)
 # -----------------------------------------------------------------------------
 st.header("2. 그룹별 특성 비교 (Basic Analysis)")
 st.info("2021년(1차년도) 당시의 인구통계학적 특성에 따른 취업 성공률 차이를 분석합니다.")
 
-tab1, tab2, tab3, tab10 = st.tabs(["📊 인구통계학적 특성", "🏫 학력 및 지역", "💪 건강 상태", "지도"])
+tab1, tab2, tab3, tab10 = st.tabs(["📊 인구통계학적 특성", "🏫 학력 및 지역", "💪 건강 상태", '지도'])
 
 with tab1:
     c1, c2 = st.columns(2)
     # 성별 분포
     with c1:
         st.markdown("**성별에 따른 취업 성공률**")
-        fig_gender = px.histogram(filtered_df, x="gender_label", color="outcome", 
+        fig_gender = px.histogram(df, x="gender_label", color="outcome", 
                                   barmode="group", text_auto=True,
                                   color_discrete_map={"취업 성공": "#2ecc71", "미취업": "#e74c3c"},
                                   labels={"gender_label": "성별", "outcome": "상태"})
@@ -98,7 +197,7 @@ with tab1:
     # 나이 분포
     with c2:
         st.markdown("**나이 분포 (Boxplot)**")
-        fig_age = px.box(filtered_df, x="outcome", y="age", color="outcome",
+        fig_age = px.box(df, x="outcome", y="age", color="outcome",
                          color_discrete_map={"취업 성공": "#2ecc71", "미취업": "#e74c3c"},
                          labels={"age": "나이 (2021년 기준)", "outcome": "상태"})
         st.plotly_chart(fig_age, use_container_width=True)
@@ -108,14 +207,14 @@ with tab1:
     st.subheader("📊 심화: 나이대와 성별에 따른 취업률 차이")
     
     # 3. 나이 그룹 생성 (데이터에 없는 경우 즉석에서 생성)
-    if 'age_group' not in filtered_df.columns:
-        filtered_df['age_group'] = pd.cut(filtered_df['age'], 
+    if 'age_group' not in df.columns:
+        df['age_group'] = pd.cut(df['age'], 
                                           bins=[18, 24, 29], 
                                           labels=['19-24세 (초반)', '25-29세 (후반)'])
 
     # 4. 데이터 집계 (나이대/성별별 취업 성공률)
     # got_job_flag가 1(성공), 0(실패)이므로 mean()이 성공률이 됨
-    grouped_stats = filtered_df.groupby(['age_group', 'gender_label'], observed=False)['got_job_flag'].mean().reset_index()
+    grouped_stats = df.groupby(['age_group', 'gender_label'], observed=False)['got_job_flag'].mean().reset_index()
     grouped_stats['success_rate'] = grouped_stats['got_job_flag'] * 100 # % 변환
 
     col_new1, col_new2 = st.columns([2, 1])
@@ -147,7 +246,7 @@ with tab2:
     # 학력별 분포
     with c1:
         st.markdown("**최종 학력별 비중**")
-        fig_edu = px.histogram(filtered_df, x="edu_label", color="outcome", 
+        fig_edu = px.histogram(df, x="edu_label", color="outcome", 
                                barmode="group",
                                color_discrete_map={"취업 성공": "#2ecc71", "미취업": "#e74c3c"},
                                labels={"edu_label": "최종 학력"})
@@ -156,7 +255,7 @@ with tab2:
     # 지역별 분포
     with c2:
         st.markdown("**지역별 취업 성공 분포**")
-        fig_region = px.histogram(filtered_df, y="region_label", color="outcome",
+        fig_region = px.histogram(df, y="region_label", color="outcome",
                                   barmode="stack", orientation='h',
                                   color_discrete_map={"취업 성공": "#2ecc71", "미취업": "#e74c3c"},
                                   labels={"region_label": "거주 지역"})
@@ -168,8 +267,8 @@ with tab3:
     st.markdown("**주관적 건강 상태와 취업의 관계**")
     
     # 비율 계산 후 그래프 생성
-    health_counts = filtered_df.groupby(['health_label', 'outcome'], observed=False).size().reset_index(name='count')
-    health_total = filtered_df.groupby('health_label', observed=False).size().reset_index(name='total')
+    health_counts = df.groupby(['health_label', 'outcome'], observed=False).size().reset_index(name='count')
+    health_total = df.groupby('health_label', observed=False).size().reset_index(name='total')
     health_merged = health_counts.merge(health_total, on='health_label')
     health_merged['ratio'] = health_merged['count'] / health_merged['total'] * 100
     
@@ -183,8 +282,7 @@ with tab10:
     # -----------------------------------------------------------------------------
 # [Interactive] 지역별 심층 특성 지도 + 클릭 상세 리포트 (오류 수정됨)
 # -----------------------------------------------------------------------------
- st.divider()
-st.header("4. 지역별 심층 특성 지도 (Interactive Map)")
+    st.header("4. 지역별 심층 특성 지도 (Interactive Map)")
 st.info("👇 **지도 위의 원을 클릭**해보세요! 하단에 해당 지역의 상세 분석 리포트가 나타납니다.")
 
 # 1. 데이터 집계
@@ -196,18 +294,18 @@ agg_funcs = {
 }
 
 # 부모님 대졸 비율 & 진로지도 경험률 추가
-if 'father_edu' in filtered_df.columns:
-    filtered_df['father_high_edu'] = filtered_df['father_edu'].apply(lambda x: 1 if x == '대졸 이상' else 0)
+if 'father_edu' in df.columns:
+    df['father_high_edu'] = df['father_edu'].apply(lambda x: 1 if x == '대졸 이상' else 0)
     agg_funcs['father_high_edu'] = 'mean'
-if 'career_guidance' in filtered_df.columns:
-    filtered_df['has_guidance'] = filtered_df['career_guidance'].apply(lambda x: 1 if x == '있음' else 0)
+if 'career_guidance' in df.columns:
+    df['has_guidance'] = df['career_guidance'].apply(lambda x: 1 if x == '있음' else 0)
     agg_funcs['has_guidance'] = 'mean'
-if 'y01a616_1' in filtered_df.columns: 
-    filtered_df['has_intern'] = filtered_df['y01a616_1'].apply(lambda x: 1 if x in [1, 2] else 0)
+if 'y01a616_1' in df.columns: 
+    df['has_intern'] = df['y01a616_1'].apply(lambda x: 1 if x in [1, 2] else 0)
     agg_funcs['has_intern'] = 'mean'
 
 # 집계 실행
-map_deep_df = filtered_df.groupby('region_label', observed=False).agg(agg_funcs).reset_index()
+map_deep_df = df.groupby('region_label', observed=False).agg(agg_funcs).reset_index()
 
 # 표시용 데이터 가공 (점수 및 % 변환)
 map_deep_df['취업 성공률(%)'] = (map_deep_df['got_job_flag'] * 100).round(1)
@@ -359,7 +457,7 @@ with tab4:
     
     with col_a:
         st.markdown("**경험 유형별 분포**")
-        exp_counts = filtered_df['exp_type'].value_counts().reset_index()
+        exp_counts = df['exp_type'].value_counts().reset_index()
         exp_counts.columns = ['유형', '인원수']
         fig_pie = px.pie(exp_counts, values='인원수', names='유형', hole=0.4, title="NEET 청년들의 재학 중 경험")
         st.plotly_chart(fig_pie, use_container_width=True)
@@ -367,7 +465,7 @@ with tab4:
     with col_b:
         st.markdown("**경험 유무에 따른 취업 성공률 (%)**")
         # 성공률 계산
-        exp_succ = filtered_df.groupby('exp_type')['got_job_flag'].mean().reset_index()
+        exp_succ = df.groupby('exp_type')['got_job_flag'].mean().reset_index()
         exp_succ['성공률'] = exp_succ['got_job_flag'] * 100
         
         fig_exp_bar = px.bar(exp_succ, x='exp_type', y='성공률', 
@@ -382,8 +480,8 @@ with tab5:
     st.subheader("📢 구직 정보 취득 경로 (1순위)")
 
     # '응답 없음' 제거한 데이터만 분석
-    if 'search_method' in filtered_df.columns:
-        search_df = filtered_df[filtered_df['search_method'] != '응답 없음']
+    if 'search_method' in df.columns:
+        search_df = df[df['search_method'] != '응답 없음']
 
         # 응답자가 0명일 때
         if search_df.empty:
@@ -455,36 +553,141 @@ with tab5:
         st.warning("구직 경로 데이터가 없습니다. make_data.py를 다시 실행해주세요.")
 
 with tab6:
-    c1, c2 = st.columns(2)
+    c1, c_g2 = st.columns(2)
     
     with c1:
-        st.markdown("**진로지도(상담) 경험 유무**")
-        # Stacked Bar
-        fig_guide = px.histogram(filtered_df, x="career_guidance", color="outcome", 
-                                 barmode="group", text_auto=True,
-                                 color_discrete_map={"취업 성공": "#2ecc71", "미취업": "#e74c3c"},
-                                 labels={"career_guidance": "진로지도 경험"})
+        fig_guide = px.histogram(
+            df, 
+            x="outcome",            # X축을 결과(취업 성공/미취업)로 변경
+            color="career_guidance", # 색상을 원인(경험 있음/없음)으로 변경
+            barmode="group", 
+            text_auto=True,
+            category_orders={
+                "outcome": ["취업 성공", "미취업"],    # X축 순서 고정
+                "career_guidance": ["있음", "없음"]    # 범례 순서 고정
+            },
+            color_discrete_map={
+                "있음": "#2ecc71", # 경험 있음: 초록색
+                "없음": "#95a5a6"  # 경험 없음: 회색 (중립적 색상 사용)
+            },
+            labels={
+                "outcome": "취업 여부",
+                "career_guidance": "진로지도(상담) 경험",
+                "count": "인원 수"
+            },
+            title="취업 성공/실패 그룹 내 진로지도 경험 분포"
+        )
+        
+        # 텍스트 위치 및 포맷 조정
+        fig_guide.update_traces(textposition='outside')
         st.plotly_chart(fig_guide, use_container_width=True)
         
-    with c2:
-        st.markdown("**진로계획 명확성 점수 (5점 만점)**")
-        # Boxplot
-        fig_plan = px.box(filtered_df, x="outcome", y="career_plan_score", color="outcome",
-                          color_discrete_map={"취업 성공": "#2ecc71", "미취업": "#e74c3c"},
-                          labels={"career_plan_score": "진로계획 명확성(점)"})
-        st.plotly_chart(fig_plan, use_container_width=True)
+    with c_g2:
+        st.markdown("**진로 결정 어려움 요인 분석 (3개년 평균 Radar Chart)**")
+
+    radar_cols = [
+        'avg_career_plan_score',
+        'avg_trouble_deciding_career',
+        'avg_uncertain_decision_pending',
+        'avg_aptitude_not_known'
+    ]
+
+    categories = ['진로 계획 명확성','진로결정 어려움', '진로 불확실성', '적성을 모름']
+
+    # 그룹별 평균 계산
+    avg_diff = df.groupby('outcome')[radar_cols].mean().reset_index()
+
+    fig_radar_psych = go.Figure()
+
+    # 취업 성공
+    if '취업 성공' in avg_diff['outcome'].values:
+        success_vals = avg_diff[avg_diff['outcome'] == '취업 성공'][radar_cols].values[0].tolist()
+        fig_radar_psych.add_trace(go.Scatterpolar(
+            r=success_vals + [success_vals[0]],
+            theta=categories + [categories[0]],
+            fill='toself',
+            name='취업 성공',
+            line_color='#2ecc71'
+        ))
+
+    # 미취업
+    if '미취업' in avg_diff['outcome'].values:
+        fail_vals = avg_diff[avg_diff['outcome'] == '미취업'][radar_cols].values[0].tolist()
+        fig_radar_psych.add_trace(go.Scatterpolar(
+            r=fail_vals + [fail_vals[0]],
+            theta=categories + [categories[0]],
+            fill='toself',
+            name='미취업',
+            line_color='#e74c3c'
+        ))
+
+    fig_radar_psych.update_layout(
+        polar=dict(radialaxis=dict(visible=True, range=[1, 5])),
+        title="3개년 평균 진로 어려움 요인 비교 (높을수록 어려움 ↑)"
+    )
+
+    st.plotly_chart(fig_radar_psych, use_container_width=True)
+    # 박스플롯 상세
+    st.markdown("#### 📦 상세 분포 확인")
+    b_col1, b_col2, b_col3, b_col4 = st.columns(4)
+    common_box_opts = {
+        "x": "outcome", "color": "outcome",
+        "category_orders": {"outcome": ["취업 성공", "미취업"]},
+        "color_discrete_map": {"취업 성공": "#2ecc71", "미취업": "#e74c3c"}
+    }
+    
+    st.markdown("#### 📦 상세 분포 확인 (3개년 평균)")
+
+b_col1, b_col2, b_col3 = st.columns(3)
+
+with b_col1:
+    st.markdown("**① 진로 계획 명확성**")
+    fig_b1 = px.box(df, y="avg_career_plan_score", **common_box_opts)
+    fig_b1.update_layout(showlegend=False)
+    st.plotly_chart(fig_b1, use_container_width=True)
+
+    # T-test
+    g1 = df[df['outcome'] == '취업 성공']['avg_career_plan_score'].dropna()
+    g2 = df[df['outcome'] == '미취업']['avg_career_plan_score'].dropna()
+    t_stat, p_val = ttest_ind(g1, g2, equal_var=False)
+    st.markdown(f"📌 **t-test p-value:** `{p_val:.4f}`")
+
+with b_col2:
+    st.markdown("**② 진로결정 어려움 평균**")
+    fig_b2 = px.box(df, y="avg_trouble_deciding_career", **common_box_opts)
+    fig_b2.update_layout(showlegend=False)
+    st.plotly_chart(fig_b2, use_container_width=True)
+
+    # T-test
+    g1 = df[df['outcome'] == '취업 성공']['avg_trouble_deciding_career'].dropna()
+    g2 = df[df['outcome'] == '미취업']['avg_trouble_deciding_career'].dropna()
+    t_stat, p_val = ttest_ind(g1, g2, equal_var=False)
+    st.markdown(f"📌 **t-test p-value:** `{p_val:.4f}`")
+
+with b_col3:
+    st.markdown("**③ 결정 보류/불확실 평균**")
+    fig_b3 = px.box(df, y="avg_uncertain_decision_pending", **common_box_opts)
+    fig_b3.update_layout(showlegend=False)
+    st.plotly_chart(fig_b3, use_container_width=True)
+
+    # T-test
+    g1 = df[df['outcome'] == '취업 성공']['avg_uncertain_decision_pending'].dropna()
+    g2 = df[df['outcome'] == '미취업']['avg_uncertain_decision_pending'].dropna()
+    t_stat, p_val = ttest_ind(g1, g2, equal_var=False)
+    st.markdown(f"📌 **t-test p-value:** `{p_val:.4f}`")
+
 
 with tab7:
     st.markdown("**취업 성공(Got Job)과의 상관관계 분석**")
     st.caption("빨간색(양의 상관관계)이 진할수록 취업 성공과 관련이 높습니다.")
     
     # 상관분석용 데이터 준비
-    if len(filtered_df) > 10:
-        corr_df = filtered_df[['got_job_flag', 'age', 'career_plan_score']].copy()
-        corr_df['is_male'] = filtered_df['gender'].apply(lambda x: 1 if x==1 else 0)
-        corr_df['has_intern'] = filtered_df['exp_type'].apply(lambda x: 1 if '인턴' in x else 0)
-        corr_df['has_guidance'] = filtered_df['career_guidance'].apply(lambda x: 1 if x=='있음' else 0)
-        corr_df['is_univ_grad'] = filtered_df['edu_label'].apply(lambda x: 1 if x in ['대졸', '대학원졸'] else 0)
+    if len(df) > 10:
+        corr_df = df[['got_job_flag', 'age', 'career_plan_score']].copy()
+        corr_df['is_male'] = df['gender'].apply(lambda x: 1 if x==1 else 0)
+        corr_df['has_intern'] = df['exp_type'].apply(lambda x: 1 if '인턴' in x else 0)
+        corr_df['has_guidance'] = df['career_guidance'].apply(lambda x: 1 if x=='있음' else 0)
+        corr_df['is_univ_grad'] = df['edu_label'].apply(lambda x: 1 if x in ['대졸', '대학원졸'] else 0)
         
         corr_matrix = corr_df.corr()
         
@@ -499,4 +702,4 @@ with tab7:
 # -----------------------------------------------------------------------------
 st.divider()
 with st.expander("원본 데이터 샘플 보기"):
-    st.dataframe(filtered_df.head(100))
+    st.dataframe(df.head(100))
