@@ -437,7 +437,7 @@ with tabs[1]:
             weak_point = categories[min_idx]
 
             st.info(f"""
-            **💡 AI Insight**
+            **💡 Insight**
             
             **{selected_region}** 지역은 전국 평균 대비
             **'{strong_point}'** 수치가 **{max_val:.1f}**점으로 가장 우수합니다.
