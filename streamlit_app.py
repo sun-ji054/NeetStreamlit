@@ -594,10 +594,9 @@ with tabs[4]:
             comparison = "많습니다" if diff > 0 else "적습니다"
 
             st.info(
-                f"💡 **분석 결과:** 자산 **1억 원(10,000만 원) 이상**을 제외하고 분석한 결과, "
+                f"💡 **분석 결과:** "
                 f"취업 성공 그룹의 평균 자산은 **{int(val_emp):,}만원**이며, "
                 f"미취업 그룹({int(val_unemp):,}만원)보다 약 **{abs(int(diff)):,}만원 {comparison}**.\n\n"
-                "극단적인 고액 자산가를 제외함으로써, 일반적인 청년층의 자산과 취업의 관계를 더 명확하게 확인할 수 있습니다."
             )
         except (IndexError, ValueError):
             st.warning("데이터가 충분하지 않아 인사이트를 생성할 수 없습니다.")
