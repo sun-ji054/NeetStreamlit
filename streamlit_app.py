@@ -531,6 +531,9 @@ with tabs[4]:
         # NaN(무응답)을 제외한 유효 데이터만 추출
         valid_asset_df = df.dropna(subset=['total_asset_amount']).copy()
         
+        # [요청 반영] 자산 10,000만 원(1억 원) 이상인 데이터 제거
+        valid_asset_df = valid_asset_df[valid_asset_df['total_asset_amount'] <= 10000]
+        
         # ---------------------------------------------------------------------
         # (1) 취업 여부(outcome)에 따른 '평균 자산액' 비교
         # ---------------------------------------------------------------------
@@ -591,31 +594,16 @@ with tabs[4]:
             comparison = "많습니다" if diff > 0 else "적습니다"
 
             st.info(
-                f"💡 **분석 결과:** 이상치를 제거한 후 확인한 결과, "
+                f"💡 **분석 결과:** 자산 **1억 원(10,000만 원) 이상**을 제외하고 분석한 결과, "
                 f"취업 성공 그룹의 평균 자산은 **{int(val_emp):,}만원**이며, "
                 f"미취업 그룹({int(val_unemp):,}만원)보다 약 **{abs(int(diff)):,}만원 {comparison}**.\n\n"
-                "일반적으로 자산 형성은 근로 소득의 결과이므로 취업자의 자산이 더 높게 나타나는 것이 정상적인 패턴입니다."
+                "극단적인 고액 자산가를 제외함으로써, 일반적인 청년층의 자산과 취업의 관계를 더 명확하게 확인할 수 있습니다."
             )
         except (IndexError, ValueError):
             st.warning("데이터가 충분하지 않아 인사이트를 생성할 수 없습니다.")
             
     else:
         st.error("⚠️ 'total_asset_amount' 데이터가 없습니다. data_preprocessing.py를 실행하여 데이터를 갱신해주세요.")
-# ==============================
-# 📌 TAB 6: 학력 및 지역
-# ==============================
-with tabs[5]:
-    st.subheader("🏫 학력과 거주지")
-    c1, c2 = st.columns(2)
-    with c1:
-        fig = px.histogram(df, x="edu_label", color="outcome", barmode="group",
-                           color_discrete_map=COLOR_MAP, title="학력별 분포")
-        st.plotly_chart(update_chart_design(fig), use_container_width=True)
-    with c2:
-        fig2 = px.histogram(df, y="region_label", color="outcome", barmode="stack", orientation='h',
-                            color_discrete_map=COLOR_MAP, title="지역별 분포")
-        fig2.update_layout(yaxis={'categoryorder':'total ascending'})
-        st.plotly_chart(update_chart_design(fig2), use_container_width=True)
 
 # ==============================
 # 📌 TAB 7: 건강
