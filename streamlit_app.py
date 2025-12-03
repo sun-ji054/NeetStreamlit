@@ -622,6 +622,23 @@ with tabs[4]:
             
     else:
         st.error("⚠️ 'total_asset_amount' 데이터가 없습니다. data_preprocessing.py를 실행하여 데이터를 갱신해주세요.")
+# ==============================
+# 📌 TAB 6: 학력 및 지역
+# ==============================
+with tabs[5]:
+    st.subheader("🏫 학력과 거주지")
+    c1, c2 = st.columns(2)
+    with c1:
+        fig = px.histogram(df, x="edu_label", color="outcome", barmode="group",
+                           color_discrete_map=COLOR_MAP, title="학력별 분포")
+        st.plotly_chart(update_chart_design(fig), use_container_width=True)
+    with c2:
+        fig2 = px.histogram(df, y="region_label", color="outcome", barmode="stack", orientation='h',
+                            color_discrete_map=COLOR_MAP, title="지역별 분포")
+        fig2.update_layout(yaxis={'categoryorder':'total ascending'})
+        st.plotly_chart(update_chart_design(fig2), use_container_width=True)
+
+# ==============================
 # 📌 TAB 7: 건강
 # ==============================
 with tabs[6]:
