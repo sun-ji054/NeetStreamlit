@@ -340,8 +340,8 @@ with tabs[1]:
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("대상 인원", f"{int(region_data['sampid'])}명")
         c2.metric("취업 성공률", f"{region_data['취업 성공률(%)']}%")
-        c3.metric("자아효능감", f"{region_data['자아효능감(점)']}점")
-        c4.metric("진로계획 명확성", f"{region_data['진로계획 명확성(점)']}점")
+        c3.metric("자아효능감(5점 만점)", f"{region_data['자아효능감(점)']}점")
+        c4.metric("진로계획 명확성(5점 만점)", f"{region_data['진로계획 명확성(점)']}점")
         c5.metric("일 경험률", f"{region_data['일 경험률(%)']}%")
         
         st.write("") # 여백
