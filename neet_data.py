@@ -28,7 +28,7 @@ target_vars = [
     'y01c116', 'y01c136',
     'y01c603d', 'y01c604',
     'y01c771a',
-    'y01f507'
+    'y01f508'
 ]
 
 valid_vars = [c for c in target_vars if c in w1.columns]
@@ -173,8 +173,13 @@ neet_df['main_difficulty'] = neet_df['y01c771a'].map({
     5:'임금/조건 불일치', 6:'면접 기술 부족', 7:'자신감 결여', 97:'기타'
 }).fillna('해당없음')
 
-neet_df['has_asset'] = neet_df['y01f507'].apply(lambda x: 1 if x == 1 else 0)
-
+# y01f508: 금융자산 총액 (단위: 만원). 결측치나 응답거절(999999 등) 처리 필요
+# 여기서는 NaN을 0으로 처리 (자산 없음)하고 극단적 이상치는 그대로 둠 (분석 시 주의)
+if 'y01f508' in neet_df.columns:
+    neet_df['total_asset_amount'] = pd.to_numeric(neet_df['y01f508'], errors='coerce').fillna(0)
+    # y01f507(자산유무)이 '없음(2)'인데 금액이 NaN인 경우 0으로 보정됨
+else:
+    neet_df['total_asset_amount'] = 0
 
 # 16. CSV 저장
 neet_df.to_csv("neet_dashboard_data.csv", index=False, encoding="utf-8-sig")

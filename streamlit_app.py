@@ -522,6 +522,88 @@ with tabs[4]:
                       color_discrete_map={'남성': '#29B6F6', '여성': '#FF7043'})
         st.plotly_chart(update_chart_design(fig2), use_container_width=True)
 
+    st.divider()
+    st.subheader("💰 금융자산 규모와 취업 성공의 관계")
+    st.caption("단순한 자산 보유 여부를 넘어, **금융자산 총액(y01f508)**이 취업 성과와 어떤 상관관계를 보이는지 분석합니다.")
+
+    # 1. 데이터 가공
+    if 'total_asset_amount' in df.columns:
+        # (1) 자산 금액 구간화 (Binning)
+        # 0원, 500만원 미만, 2000만원 미만, 2000만원 이상 등으로 구분
+        bins = [-1, 0, 500, 2000, float('inf')]
+        labels = ['없음(0원)', '500만원 미만', '500~2,000만원', '2,000만원 이상']
+        
+        df['asset_group'] = pd.cut(df['total_asset_amount'], bins=bins, labels=labels)
+
+        # ---------------------------------------------------------------------
+        # [좌측 데이터] 취업 여부(outcome)에 따른 '평균 자산액' 비교
+        # ---------------------------------------------------------------------
+        avg_asset_by_job = df.groupby('outcome', observed=False)['total_asset_amount'].mean().reset_index()
+        avg_asset_by_job['amount'] = avg_asset_by_job['total_asset_amount'].round(0) # 만원 단위 반올림
+
+        # ---------------------------------------------------------------------
+        # [우측 데이터] 자산 규모(asset_group)에 따른 '취업 성공률' 비교
+        # ---------------------------------------------------------------------
+        job_rate_by_asset_group = df.groupby('asset_group', observed=False)['got_job_flag'].mean().reset_index()
+        job_rate_by_asset_group['rate'] = (job_rate_by_asset_group['got_job_flag'] * 100).round(1)
+
+        # 2. 차트 그리기
+        c1, c2 = st.columns(2)
+
+        with c1:
+            st.markdown("##### 1️⃣ 취업 성공/실패 그룹의 평균 자산액")
+            fig_avg = px.bar(
+                avg_asset_by_job,
+                x="outcome",
+                y="amount",
+                color="outcome",
+                text_auto=',.0f',
+                title="취업 상태별 평균 금융자산 (단위: 만원)",
+                labels={'outcome': '취업 상태', 'amount': '평균 자산액(만원)'},
+                color_discrete_map={'취업 성공': '#66BB6A', '미취업': '#EF5350'}
+            )
+            fig_avg.update_layout(showlegend=False)
+            st.plotly_chart(fig_avg, use_container_width=True)
+
+        with c2:
+            st.markdown("##### 2️⃣ 자산 규모별 취업 성공률 추이")
+            fig_trend = px.bar(
+                job_rate_by_asset_group,
+                x="asset_group",
+                y="rate",
+                color="asset_group",
+                text_auto='.1f',
+                title="자산 구간별 취업 성공률 (%)",
+                labels={'asset_group': '금융자산 규모', 'rate': '취업 성공률(%)'},
+                color_discrete_sequence=px.colors.sequential.Blues
+            )
+            fig_trend.update_layout(showlegend=False, yaxis_range=[0, 100])
+            st.plotly_chart(fig_trend, use_container_width=True)
+
+        # 3. 텍스트 인사이트
+        try:
+            # 수치 추출 for Insight
+            avg_employed = avg_asset_by_job.loc[avg_asset_by_job['outcome']=='취업 성공', 'amount'].values[0]
+            avg_unemployed = avg_asset_by_job.loc[avg_asset_by_job['outcome']=='미취업', 'amount'].values[0]
+            diff_amount = avg_employed - avg_unemployed
+            
+            high_asset_rate = job_rate_by_asset_group.iloc[-1]['rate'] # 가장 높은 구간(2000만원 이상)
+            no_asset_rate = job_rate_by_asset_group.iloc[0]['rate'] # 자산 없음
+            
+            comparison = "많습니다" if diff_amount > 0 else "적습니다"
+            
+            st.info(
+                f"💡 **분석 결과:** 취업에 성공한 청년들의 평균 금융자산은 약 **{int(avg_employed):,}만원**으로, "
+                f"미취업 청년({int(avg_unemployed):,}만원)보다 평균 **{abs(int(diff_amount)):,}만원 더 {comparison}**.\n\n"
+                f"또한 자산 규모별로 보았을 때, 자산이 없는 그룹의 취업률은 **{no_asset_rate}%**인 반면, "
+                f"고액 자산(2,000만원 이상) 보유 그룹의 취업률은 **{high_asset_rate}%**로 나타났습니다."
+            )
+        except (IndexError, KeyError):
+            st.warning("데이터 집계 중 오류가 발생하여 상세 인사이트를 표시할 수 없습니다.")
+            
+    else:
+        st.warning("⚠️ 'total_asset_amount' 데이터가 없습니다. 전처리 코드(data_preprocessing.py)를 다시 실행해주세요.")
+
 # ==============================
 # 📌 TAB 6: 학력 및 지역
 # ==============================
