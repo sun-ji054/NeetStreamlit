@@ -176,10 +176,25 @@ neet_df['main_difficulty'] = neet_df['y01c771a'].map({
 # y01f508: 금융자산 총액 (단위: 만원). 결측치나 응답거절(999999 등) 처리 필요
 # 여기서는 NaN을 0으로 처리 (자산 없음)하고 극단적 이상치는 그대로 둠 (분석 시 주의)
 if 'y01f508' in neet_df.columns:
-    neet_df['total_asset_amount'] = pd.to_numeric(neet_df['y01f508'], errors='coerce').fillna(0)
-    # y01f507(자산유무)이 '없음(2)'인데 금액이 NaN인 경우 0으로 보정됨
+    # 1. 숫자형으로 변환 (문자열 등 오류 방지)
+    neet_df['total_asset_amount'] = pd.to_numeric(neet_df['y01f508'], errors='coerce')
+    
+    # 2. 무응답/거절 코드 제거 (NaN 처리)
+    # 999999, 9090908, 9090909 등 설문조사 특유의 코드를 제거
+    error_codes = [999999, 9090908, 9090909]
+    neet_df.loc[neet_df['total_asset_amount'].isin(error_codes), 'total_asset_amount'] = np.nan
+    
+    # 3. '자산 없음(y01f507=2)' 응답자는 확실하게 0원으로 처리
+    if 'y01f507' in neet_df.columns:
+        neet_df.loc[neet_df['y01f507'] == 2, 'total_asset_amount'] = 0
+    
+    # 4. 결측치(NaN)는 0으로 채울지, 제외할지 결정
+    # 분석의 정확성을 위해 일단 NaN으로 둡니다. (0으로 채우면 평균이 왜곡될 수 있음)
+    # 단, Streamlit에서 fillna(0)이 필요하면 그때 처리합니다.
+    # 여기서는 "자산이 있다고 했는데 액수를 모르는 경우"는 제외하는 것이 깔끔합니다.
+    
 else:
-    neet_df['total_asset_amount'] = 0
+    neet_df['total_asset_amount'] = np.nan # 컬럼이 아예 없으면 NaN
 
 # 16. CSV 저장
 neet_df.to_csv("neet_dashboard_data.csv", index=False, encoding="utf-8-sig")

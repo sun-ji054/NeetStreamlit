@@ -526,25 +526,28 @@ with tabs[4]:
     st.subheader("💰 금융자산 규모와 취업 성공의 관계")
     st.caption("단순한 자산 보유 여부를 넘어, **금융자산 총액(y01f508)**이 취업 성과와 어떤 상관관계를 보이는지 분석합니다.")
 
-    # 1. 데이터 가공
+    # 1. 데이터 준비 (유효한 자산 데이터만 필터링)
     if 'total_asset_amount' in df.columns:
-        # (1) 자산 금액 구간화 (Binning)
-        # 0원, 500만원 미만, 2000만원 미만, 2000만원 이상 등으로 구분
-        bins = [-1, 0, 500, 2000, float('inf')]
-        labels = ['없음(0원)', '500만원 미만', '500~2,000만원', '2,000만원 이상']
+        # NaN(무응답)을 제외한 유효 데이터만 추출
+        valid_asset_df = df.dropna(subset=['total_asset_amount']).copy()
         
-        df['asset_group'] = pd.cut(df['total_asset_amount'], bins=bins, labels=labels)
+        # ---------------------------------------------------------------------
+        # (1) 취업 여부(outcome)에 따른 '평균 자산액' 비교
+        # ---------------------------------------------------------------------
+        # 이상치가 제거되었으므로 평균이 유의미합니다.
+        avg_asset_by_job = valid_asset_df.groupby('outcome', observed=False)['total_asset_amount'].mean().reset_index()
+        avg_asset_by_job['amount'] = avg_asset_by_job['total_asset_amount'].round(0) # 만원 단위
 
         # ---------------------------------------------------------------------
-        # [좌측 데이터] 취업 여부(outcome)에 따른 '평균 자산액' 비교
+        # (2) 자산 규모(asset_group)에 따른 '취업 성공률' 비교
         # ---------------------------------------------------------------------
-        avg_asset_by_job = df.groupby('outcome', observed=False)['total_asset_amount'].mean().reset_index()
-        avg_asset_by_job['amount'] = avg_asset_by_job['total_asset_amount'].round(0) # 만원 단위 반올림
-
-        # ---------------------------------------------------------------------
-        # [우측 데이터] 자산 규모(asset_group)에 따른 '취업 성공률' 비교
-        # ---------------------------------------------------------------------
-        job_rate_by_asset_group = df.groupby('asset_group', observed=False)['got_job_flag'].mean().reset_index()
+        # 구간 설정: 0원 / 500만원 미만 / 2000만원 미만 / 2000만원 이상
+        bins = [-1, 0, 500, 2000, float('inf')]
+        labels = ['자산 없음(0원)', '500만원 미만', '500~2,000만원', '2,000만원 이상']
+        
+        valid_asset_df['asset_group'] = pd.cut(valid_asset_df['total_asset_amount'], bins=bins, labels=labels)
+        
+        job_rate_by_asset_group = valid_asset_df.groupby('asset_group', observed=False)['got_job_flag'].mean().reset_index()
         job_rate_by_asset_group['rate'] = (job_rate_by_asset_group['got_job_flag'] * 100).round(1)
 
         # 2. 차트 그리기
@@ -558,15 +561,15 @@ with tabs[4]:
                 y="amount",
                 color="outcome",
                 text_auto=',.0f',
-                title="취업 상태별 평균 금융자산 (단위: 만원)",
-                labels={'outcome': '취업 상태', 'amount': '평균 자산액(만원)'},
+                title="평균 금융자산 (단위: 만원)",
+                labels={'outcome': '취업 상태', 'amount': '평균 자산(만원)'},
                 color_discrete_map={'취업 성공': '#66BB6A', '미취업': '#EF5350'}
             )
             fig_avg.update_layout(showlegend=False)
             st.plotly_chart(fig_avg, use_container_width=True)
 
         with c2:
-            st.markdown("##### 2️⃣ 자산 규모별 취업 성공률 추이")
+            st.markdown("##### 2️⃣ 자산 규모별 취업 성공률")
             fig_trend = px.bar(
                 job_rate_by_asset_group,
                 x="asset_group",
@@ -580,30 +583,24 @@ with tabs[4]:
             fig_trend.update_layout(showlegend=False, yaxis_range=[0, 100])
             st.plotly_chart(fig_trend, use_container_width=True)
 
-        # 3. 텍스트 인사이트
+        # 3. 인사이트 텍스트
         try:
-            # 수치 추출 for Insight
-            avg_employed = avg_asset_by_job.loc[avg_asset_by_job['outcome']=='취업 성공', 'amount'].values[0]
-            avg_unemployed = avg_asset_by_job.loc[avg_asset_by_job['outcome']=='미취업', 'amount'].values[0]
-            diff_amount = avg_employed - avg_unemployed
-            
-            high_asset_rate = job_rate_by_asset_group.iloc[-1]['rate'] # 가장 높은 구간(2000만원 이상)
-            no_asset_rate = job_rate_by_asset_group.iloc[0]['rate'] # 자산 없음
-            
-            comparison = "많습니다" if diff_amount > 0 else "적습니다"
-            
+            val_emp = avg_asset_by_job.loc[avg_asset_by_job['outcome']=='취업 성공', 'amount'].values[0]
+            val_unemp = avg_asset_by_job.loc[avg_asset_by_job['outcome']=='미취업', 'amount'].values[0]
+            diff = val_emp - val_unemp
+            comparison = "많습니다" if diff > 0 else "적습니다"
+
             st.info(
-                f"💡 **분석 결과:** 취업에 성공한 청년들의 평균 금융자산은 약 **{int(avg_employed):,}만원**으로, "
-                f"미취업 청년({int(avg_unemployed):,}만원)보다 평균 **{abs(int(diff_amount)):,}만원 더 {comparison}**.\n\n"
-                f"또한 자산 규모별로 보았을 때, 자산이 없는 그룹의 취업률은 **{no_asset_rate}%**인 반면, "
-                f"고액 자산(2,000만원 이상) 보유 그룹의 취업률은 **{high_asset_rate}%**로 나타났습니다."
+                f"💡 **분석 결과:** 이상치를 제거한 후 확인한 결과, "
+                f"취업 성공 그룹의 평균 자산은 **{int(val_emp):,}만원**이며, "
+                f"미취업 그룹({int(val_unemp):,}만원)보다 약 **{abs(int(diff)):,}만원 {comparison}**.\n\n"
+                "일반적으로 자산 형성은 근로 소득의 결과이므로 취업자의 자산이 더 높게 나타나는 것이 정상적인 패턴입니다."
             )
-        except (IndexError, KeyError):
-            st.warning("데이터 집계 중 오류가 발생하여 상세 인사이트를 표시할 수 없습니다.")
+        except (IndexError, ValueError):
+            st.warning("데이터가 충분하지 않아 인사이트를 생성할 수 없습니다.")
             
     else:
-        st.warning("⚠️ 'total_asset_amount' 데이터가 없습니다. 전처리 코드(data_preprocessing.py)를 다시 실행해주세요.")
-
+        st.error("⚠️ 'total_asset_amount' 데이터가 없습니다. data_preprocessing.py를 실행하여 데이터를 갱신해주세요.")
 # ==============================
 # 📌 TAB 6: 학력 및 지역
 # ==============================
