@@ -508,6 +508,8 @@ with tabs[4]:
     with c1:
         fig = px.histogram(df, x="gender_label", color="outcome", barmode="group", text_auto=True,
                            color_discrete_map=COLOR_MAP, title="성별 취업 성공 현황")
+        fig.update_layout(title_font_color="white")
+
         st.plotly_chart(update_chart_design(fig), use_container_width=True)
         
     with c2:
@@ -520,18 +522,20 @@ with tabs[4]:
         fig2 = px.bar(grouped, x='age_group', y='rate', color='gender_label', barmode='group',
                       text_auto='.1f', title="연령대/성별 성공률 (%)",
                       color_discrete_map={'남성': '#29B6F6', '여성': '#FF7043'})
+        fig2.update_layout(title_font_color="white")
+
         st.plotly_chart(update_chart_design(fig2), use_container_width=True)
 
     st.divider()
     st.subheader("💰 금융자산 규모와 취업 성공의 관계")
-    st.caption("단순한 자산 보유 여부를 넘어, **금융자산 총액(y01f508)**이 취업 성과와 어떤 상관관계를 보이는지 분석합니다.")
+    st.caption("단순한 자산 보유 여부를 넘어, **금융자산 총액(y01f508)**이 취업 성과와 어떤 상관관계를 보이는지 분석합니다. (1억 원 이하 데이터 기준)")
 
     # 1. 데이터 준비 (유효한 자산 데이터만 필터링)
     if 'total_asset_amount' in df.columns:
         # NaN(무응답)을 제외한 유효 데이터만 추출
         valid_asset_df = df.dropna(subset=['total_asset_amount']).copy()
         
-        # [요청 반영] 자산 10,000만 원(1억 원) 이상인 데이터 제거
+        # [조건] 자산 10,000만 원(1억 원) 이하인 데이터만 포함
         valid_asset_df = valid_asset_df[valid_asset_df['total_asset_amount'] <= 10000]
         
         # ---------------------------------------------------------------------
@@ -553,23 +557,29 @@ with tabs[4]:
         job_rate_by_asset_group = valid_asset_df.groupby('asset_group', observed=False)['got_job_flag'].mean().reset_index()
         job_rate_by_asset_group['rate'] = (job_rate_by_asset_group['got_job_flag'] * 100).round(1)
 
-        # 2. 차트 그리기
+        # 2. 차트 그리기 (디자인 통일)
         c1, c2 = st.columns(2)
 
+        # 색상 맵 정의 (Tab 4와 톤앤매너 유지)
+        OUTCOME_COLOR_MAP = {'취업 성공': '#29B6F6', '미취업': '#FF7043'} # 파랑(성공) / 주황(미취업)
+
         with c1:
-            st.markdown("##### 1️⃣ 취업 성공/실패 그룹의 평균 자산액")
+            st.markdown("##### 1️⃣ 취업 상태별 평균 자산액")
             fig_avg = px.bar(
                 avg_asset_by_job,
                 x="outcome",
                 y="amount",
                 color="outcome",
-                text_auto=',.0f',
-                title="평균 금융자산 (단위: 만원)",
+                text_auto=',.0f', # 천단위 콤마
+                title="취업/미취업 그룹 평균 자산 (단위: 만원)",
                 labels={'outcome': '취업 상태', 'amount': '평균 자산(만원)'},
-                color_discrete_map={'취업 성공': '#66BB6A', '미취업': '#EF5350'}
+                color_discrete_map=OUTCOME_COLOR_MAP
             )
-            fig_avg.update_layout(showlegend=False)
-            st.plotly_chart(fig_avg, use_container_width=True)
+
+            fig_avg.update_layout(title_font_color="white")
+
+            # 탭 4처럼 update_chart_design 적용
+            st.plotly_chart(update_chart_design(fig_avg), use_container_width=True)
 
         with c2:
             st.markdown("##### 2️⃣ 자산 규모별 취업 성공률")
@@ -581,10 +591,13 @@ with tabs[4]:
                 text_auto='.1f',
                 title="자산 구간별 취업 성공률 (%)",
                 labels={'asset_group': '금융자산 규모', 'rate': '취업 성공률(%)'},
+                # 자산 규모가 커질수록 진한 색상 (Sequential Blues)
                 color_discrete_sequence=px.colors.sequential.Blues
             )
-            fig_trend.update_layout(showlegend=False, yaxis_range=[0, 100])
-            st.plotly_chart(fig_trend, use_container_width=True)
+            fig_trend.update_layout(yaxis_range=[0, 100], title_font_color="white") # Y축 100% 고정
+
+            # 탭 4처럼 update_chart_design 적용
+            st.plotly_chart(update_chart_design(fig_trend), use_container_width=True)
 
         # 3. 인사이트 텍스트
         try:
@@ -592,19 +605,23 @@ with tabs[4]:
             val_unemp = avg_asset_by_job.loc[avg_asset_by_job['outcome']=='미취업', 'amount'].values[0]
             diff = val_emp - val_unemp
             comparison = "많습니다" if diff > 0 else "적습니다"
+            
+            # 자산 없음 vs 고자산 취업률 차이
+            rate_no_asset = job_rate_by_asset_group.loc[0, 'rate']
+            rate_high_asset = job_rate_by_asset_group.iloc[-1]['rate']
 
             st.info(
-                f"💡 **분석 결과:** "
-                f"취업 성공 그룹의 평균 자산은 **{int(val_emp):,}만원**이며, "
-                f"미취업 그룹({int(val_unemp):,}만원)보다 약 **{abs(int(diff)):,}만원 {comparison}**.\n\n"
+                f"💡 **분석 결과:** \n"
+                f"- **취업자 자산 우위:** 취업 성공 그룹의 평균 자산은 **{int(val_emp):,}만원**으로, "
+                f"미취업 그룹({int(val_unemp):,}만원)보다 약 **{abs(int(diff)):,}만원 {comparison}**.\n"
+                f"- **자산과 취업률:** 자산이 없는 그룹의 취업률(**{rate_no_asset}%**)보다 "
+                f"2,000만원 이상 자산 보유 그룹의 취업률(**{rate_high_asset}%**)이 더 높게 나타납니다."
             )
         except (IndexError, ValueError):
             st.warning("데이터가 충분하지 않아 인사이트를 생성할 수 없습니다.")
             
     else:
         st.error("⚠️ 'total_asset_amount' 데이터가 없습니다. data_preprocessing.py를 실행하여 데이터를 갱신해주세요.")
-
-# ==============================
 # 📌 TAB 7: 건강
 # ==============================
 with tabs[6]:
