@@ -631,6 +631,9 @@ with tabs[5]:
     with c1:
         fig = px.histogram(df, x="edu_label", color="outcome", barmode="group",
                            color_discrete_map=COLOR_MAP, title="학력별 분포")
+        fig.update_layout(title_font_color="white")
+
+        
         st.plotly_chart(update_chart_design(fig), use_container_width=True)
     with c2:
         fig2 = px.histogram(df, y="region_label", color="outcome", barmode="stack", orientation='h',
