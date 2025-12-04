@@ -638,7 +638,7 @@ with tabs[5]:
     with c2:
         fig2 = px.histogram(df, y="region_label", color="outcome", barmode="stack", orientation='h',
                             color_discrete_map=COLOR_MAP, title="지역별 분포")
-        fig2.update_layout(yaxis={'categoryorder':'total ascending'})
+        fig2.update_layout(yaxis={'categoryorder':'total ascending'}, title_font_color="white")
         st.plotly_chart(update_chart_design(fig2), use_container_width=True)
 
 # ==============================
@@ -654,4 +654,5 @@ with tabs[6]:
     
     fig = px.bar(merged, x="health_label", y="ratio", color="outcome", text_auto='.1f',
                  color_discrete_map=COLOR_MAP, title="주관적 건강 상태별 취업률")
+    fig.update_layout(title_font_color="white")
     st.plotly_chart(update_chart_design(fig), use_container_width=True)
