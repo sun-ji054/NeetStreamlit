@@ -654,5 +654,5 @@ with tabs[6]:
     
     fig = px.bar(merged, x="health_label", y="ratio", color="outcome", text_auto='.1f',
                  color_discrete_map=COLOR_MAP, title="주관적 건강 상태별 취업률")
-    fig.update_layout(title_font_color="white")
+    fig.update_layout(yaxis={'categoryorder':'total ascending'}, title_font_color="white")
     st.plotly_chart(update_chart_design(fig), use_container_width=True)
